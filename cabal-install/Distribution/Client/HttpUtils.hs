@@ -52,7 +52,7 @@ import qualified System.FilePath.Posix as FilePath.Posix
 import System.FilePath
          ( (<.>), takeFileName, takeDirectory )
 import System.Directory
-         ( doesFileExist, renameFile, canonicalizePath )
+         ( doesFileExist, renameFile, makeAbsolute )
 import System.IO
          ( withFile, IOMode(ReadMode), hGetContents, hClose )
 import System.IO.Error
@@ -588,7 +588,7 @@ powershellTransport prog =
         (body, boundary) <- generateMultipartBody path
         BS.hPut tmpHandle body
         hClose tmpHandle
-        fullPath <- canonicalizePath tmpFile
+        fullPath <- makeAbsolute tmpFile
 
         let contentHeader = Header HdrContentType
               ("multipart/form-data; boundary=" ++ boundary)
@@ -600,7 +600,7 @@ powershellTransport prog =
         parseUploadResponse verbosity uri resp
 
     puthttpfile verbosity uri path auth headers = do
-      fullPath <- canonicalizePath path
+      fullPath <- makeAbsolute path
       resp <- runPowershellScript verbosity $ webclientScript
         (escape (show uri))
         (setupHeaders (extraHeaders ++ headers) ++ setupAuth auth)

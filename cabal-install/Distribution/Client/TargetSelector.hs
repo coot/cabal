@@ -98,7 +98,7 @@ import System.FilePath as FilePath
          ( takeExtension, dropExtension
          , splitDirectories, joinPath, splitPath )
 import qualified System.Directory as IO
-         ( doesFileExist, doesDirectoryExist, canonicalizePath
+         ( doesFileExist, doesDirectoryExist, makeAbsolute
          , getCurrentDirectory )
 import System.FilePath
          ( (</>), (<.>), normalise, dropTrailingPathSeparator )
@@ -246,7 +246,7 @@ defaultDirActions =
       doesFileExist       = IO.doesFileExist,
       doesDirectoryExist  = IO.doesDirectoryExist,
       -- Workaround for <https://github.com/haskell/directory/issues/63>
-      canonicalizePath    = IO.canonicalizePath . dropTrailingPathSeparator,
+      canonicalizePath    = IO.makeAbsolute . dropTrailingPathSeparator,
       getCurrentDirectory = IO.getCurrentDirectory
     }
 

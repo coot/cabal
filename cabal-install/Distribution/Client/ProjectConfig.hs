@@ -411,14 +411,14 @@ findProjectRoot _ (Just projectFile)
   | isAbsolute projectFile = do
     exists <- doesFileExist projectFile
     if exists
-      then do projectFile' <- canonicalizePath projectFile
+      then do projectFile' <- makeAbsolute projectFile
               let projectRoot = ProjectRootExplicit (takeDirectory projectFile')
                                                     (takeFileName projectFile')
               return (Right projectRoot)
       else return (Left (BadProjectRootExplicitFile projectFile))
 
 findProjectRoot mstartdir mprojectFile = do
-    startdir <- maybe getCurrentDirectory canonicalizePath mstartdir
+    startdir <- maybe getCurrentDirectory makeAbsolute mstartdir
     homedir  <- getHomeDirectory
     probe startdir homedir
   where

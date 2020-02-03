@@ -66,9 +66,9 @@ possibleSelfUpgrade :: Verbosity
                     -> [FilePath]
                     -> IO a -> IO a
 possibleSelfUpgrade verbosity newPaths action = do
-  dstPath <- canonicalizePath =<< Win32.getModuleFileName Win32.nullHANDLE
+  dstPath <- makeAbsolute =<< Win32.getModuleFileName Win32.nullHANDLE
 
-  newPaths' <- mapM canonicalizePath newPaths
+  newPaths' <- mapM makeAbsolute newPaths
   let doingSelfUpgrade = any (equalFilePath dstPath) newPaths'
 
   if not doingSelfUpgrade

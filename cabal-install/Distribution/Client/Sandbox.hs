@@ -123,7 +123,7 @@ import Data.List                              ( delete
                                               , groupBy )
 import Data.Maybe                             ( fromJust )
 import Numeric                                ( showHex )
-import System.Directory                       ( canonicalizePath
+import System.Directory                       ( makeAbsolute
                                               , createDirectory
                                               , doesDirectoryExist
                                               , doesFileExist
@@ -370,7 +370,7 @@ sandboxDelete verbosity _sandboxFlags globalFlags = do
         ++ "'.\nAssuming a shared sandbox. Please delete '"
         ++ sandboxDir ++ "' manually."
 
-      absSandboxDir <- canonicalizePath sandboxDir
+      absSandboxDir <- makeAbsolute sandboxDir
       notice verbosity $ "Deleting the sandbox located at " ++ absSandboxDir
       removeDirectoryRecursive absSandboxDir
 
@@ -382,7 +382,7 @@ sandboxDelete verbosity _sandboxFlags globalFlags = do
         checkPackagePaths var = do
           let
             checkPath path = do
-              absPath <- canonicalizePath path
+              absPath <- makeAbsolute path
               (when (pathInsideSandbox absPath) . warn verbosity)
                 (var ++ " refers to package database " ++ path
                  ++ " inside the deleted sandbox.")

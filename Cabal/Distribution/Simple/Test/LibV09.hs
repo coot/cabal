@@ -35,10 +35,10 @@ import Distribution.Verbosity
 
 import qualified Control.Exception as CE
 import System.Directory
-    ( createDirectoryIfMissing, canonicalizePath
+    ( createDirectoryIfMissing
     , doesDirectoryExist, doesFileExist
-    , getCurrentDirectory, removeDirectoryRecursive, removeFile
-    , setCurrentDirectory )
+    , getCurrentDirectory, makeAbsolute, removeDirectoryRecursive
+    , removeFile, setCurrentDirectory )
 import System.Exit ( exitSuccess, exitWith, ExitCode(..) )
 import System.FilePath ( (</>), (<.>) )
 import System.IO ( hClose, hGetContents, hPutStr )
@@ -96,7 +96,7 @@ runTest pkg_descr lbi clbi flags suite = do
                   then do
                     let (Platform _ os) = LBI.hostPlatform lbi
                     paths <- LBI.depLibraryPaths True False lbi clbi
-                    cpath <- canonicalizePath $ LBI.componentBuildDir lbi clbi
+                    cpath <- makeAbsolute $ LBI.componentBuildDir lbi clbi
                     return (addLibraryPath os (cpath : paths) shellEnv)
                   else return shellEnv
                 case testWrapper flags of

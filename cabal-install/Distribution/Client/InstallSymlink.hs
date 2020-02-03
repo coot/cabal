@@ -96,7 +96,7 @@ import System.Posix.Files
          ( getSymbolicLinkStatus, isSymbolicLink, createSymbolicLink
          , removeLink )
 import System.Directory
-         ( canonicalizePath )
+         ( makeAbsolute )
 import System.FilePath
          ( (</>), splitPath, joinPath, isAbsolute )
 
@@ -152,7 +152,7 @@ symlinkBinaries platform comp overwritePolicy
     Just symlinkBinDir
            | null exes -> return []
            | otherwise -> do
-      publicBinDir  <- canonicalizePath symlinkBinDir
+      publicBinDir  <- makeAbsolute symlinkBinDir
 --    TODO: do we want to do this here? :
 --      createDirectoryIfMissing True publicBinDir
       fmap catMaybes $ sequence
@@ -207,7 +207,7 @@ symlinkBinaries platform comp overwritePolicy
                            (packageId pkg) ipid
                            cinfo InstallDirs.NoCopyDest
                            platform templateDirs
-      canonicalizePath (InstallDirs.bindir absoluteDirs)
+      makeAbsolute (InstallDirs.bindir absoluteDirs)
 
     substTemplate pkgid ipid = InstallDirs.fromPathTemplate
                              . InstallDirs.substPathTemplate env
@@ -263,7 +263,7 @@ targetOkToOverwrite symlink target = handleNotExist $ do
   status <- getSymbolicLinkStatus symlink
   if not (isSymbolicLink status)
     then return NotOurFile
-    else do target' <- canonicalizePath symlink
+    else do target' <- makeAbsolute symlink
             -- This relies on canonicalizePath handling symlinks
             if target == target'
               then return OkToOverwrite

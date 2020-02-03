@@ -115,7 +115,7 @@ import Data.Char (isLower)
 import qualified Data.Map as Map
 import System.Directory
          ( doesFileExist, getAppUserDataDirectory, createDirectoryIfMissing
-         , canonicalizePath, removeFile, renameFile, getDirectoryContents )
+         , makeAbsolute, removeFile, renameFile, getDirectoryContents )
 import System.FilePath          ( (</>), (<.>), takeExtension
                                 , takeDirectory, replaceExtension
                                 ,isRelative )
@@ -226,7 +226,7 @@ guessToolFromGhcPath tool ghcProg verbosity searchpath
   = do let toolname          = programName tool
            given_path        = programPath ghcProg
            given_dir         = takeDirectory given_path
-       real_path <- canonicalizePath given_path
+       real_path <- makeAbsolute given_path
        let real_dir           = takeDirectory real_path
            versionSuffix path = takeVersionSuffix (dropExeExtension path)
            given_suf = versionSuffix given_path

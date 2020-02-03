@@ -13,8 +13,8 @@ import Distribution.Client.Compat.Prelude
 
 import Control.Exception (bracket, catch)
 import System.Directory
-       ( canonicalizePath, createDirectoryIfMissing, doesDirectoryExist
-       , doesFileExist, removeDirectoryRecursive, removeFile )
+       ( createDirectoryIfMissing, doesDirectoryExist, doesFileExist
+       , makeAbsolute, removeDirectoryRecursive, removeFile )
 import System.Environment (getArgs, getExecutablePath)
 import System.FilePath
        ( (</>), replaceExtension, takeDirectory, takeFileName )
@@ -159,7 +159,7 @@ drvPath dist path = do
   -- available in newer versions of directory.
   -- We expect the path to be a symlink if it exists, so we do not canonicalize
   -- the entire path because that would dereference the symlink.
-  distNix <- canonicalizePath (dist </> "nix")
+  distNix <- makeAbsolute (dist </> "nix")
   -- Nix garbage collector roots must be absolute paths
   return (distNix </> replaceExtension (takeFileName path) "drv")
 

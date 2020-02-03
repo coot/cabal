@@ -48,7 +48,7 @@ import Data.Maybe                ( catMaybes )
 import Data.Either               (partitionEithers)
 import System.Directory          ( createDirectoryIfMissing,
                                    doesDirectoryExist, doesFileExist,
-                                   renameFile, canonicalizePath)
+                                   renameFile, makeAbsolute)
 import System.FilePath           ( (</>), (<.>), takeDirectory, takeExtension )
 import System.IO                 ( IOMode(..), withBinaryFile )
 
@@ -183,7 +183,7 @@ removeBuildTreeRefs verbosity indexPath l = do
   checkIndexExists verbosity indexPath
   let tmpFile = indexPath <.> "tmp"
 
-  canonRes <- mapM (\btr -> do res <- tryIO $ canonicalizePath btr
+  canonRes <- mapM (\btr -> do res <- tryIO $ makeAbsolute btr
                                return $ case res of
                                  Right pth -> Right (btr, pth)
                                  Left _ -> Left $ ErrNonexistentSource btr) l

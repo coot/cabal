@@ -92,7 +92,7 @@ import qualified Distribution.Compat.Graph as Graph
 import Data.List (stripPrefix)
 import System.FilePath
 
-import System.Directory (doesDirectoryExist, canonicalizePath)
+import System.Directory (doesDirectoryExist, makeAbsolute)
 
 -- -----------------------------------------------------------------------------
 -- Configuration information of buildable components
@@ -262,7 +262,7 @@ depLibraryPaths inplace relative lbi clbi = do
     canonicalizePathNoFail p = do
       exists <- doesDirectoryExist p
       if exists
-         then canonicalizePath p
+         then makeAbsolute p
          else return p
 
 -- | Get all module names that needed to be built by GHC; i.e., all

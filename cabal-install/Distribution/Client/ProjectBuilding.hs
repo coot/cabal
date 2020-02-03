@@ -102,7 +102,7 @@ import qualified Data.ByteString.Lazy as LBS
 
 import Control.Exception (Exception (..), Handler (..), SomeAsyncException, SomeException, assert, catches, handle, throwIO)
 import Data.Function     (on)
-import System.Directory  (canonicalizePath, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, removeFile, renameDirectory)
+import System.Directory  (makeAbsolute, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, removeFile, renameDirectory)
 import System.FilePath   (dropDrive, makeRelative, normalise, takeDirectory, (<.>), (</>))
 import System.IO         (IOMode (AppendMode), withFile)
 
@@ -1424,7 +1424,7 @@ withTempInstalledPackageInfoFile :: Verbosity -> FilePath
 withTempInstalledPackageInfoFile verbosity tempdir action =
     withTempDirectory verbosity tempdir "package-registration-" $ \dir -> do
       -- make absolute since @action@ will often change directory
-      abs_dir <- canonicalizePath dir
+      abs_dir <- makeAbsolute dir
 
       let pkgConfDest = abs_dir </> "pkgConf"
       action pkgConfDest

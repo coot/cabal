@@ -82,7 +82,7 @@ import Distribution.Simple.Utils
 
 import Control.Monad (join)
 import qualified Data.Map as Map (lookup)
-import System.Directory (canonicalizePath)
+import System.Directory (makeAbsolute)
 
 data Compiler = Compiler {
         compilerId              :: CompilerId,
@@ -213,7 +213,7 @@ absolutePackageDBPath :: PackageDB -> NoCallStackIO PackageDB
 absolutePackageDBPath GlobalPackageDB        = return GlobalPackageDB
 absolutePackageDBPath UserPackageDB          = return UserPackageDB
 absolutePackageDBPath (SpecificPackageDB db) =
-  SpecificPackageDB `liftM` canonicalizePath db
+  SpecificPackageDB `liftM` makeAbsolute db
 
 -- ------------------------------------------------------------
 -- * Optimisation levels

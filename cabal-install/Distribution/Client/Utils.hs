@@ -43,7 +43,7 @@ import Foreign.C.Types ( CInt(..) )
 import qualified Control.Exception as Exception
          ( finally, bracket )
 import System.Directory
-         ( canonicalizePath, doesFileExist, getCurrentDirectory
+         ( makeAbsolute, doesFileExist, getCurrentDirectory
          , removeFile, setCurrentDirectory )
 import System.IO
          ( Handle, hClose, openTempFile
@@ -205,13 +205,13 @@ makeAbsoluteToCwd path | isAbsolute path = return path
 -- directory, including using @../..@ if necessary.
 makeRelativeToCwd :: FilePath -> IO FilePath
 makeRelativeToCwd path =
-    makeRelativeCanonical <$> canonicalizePath path <*> getCurrentDirectory
+    makeRelativeCanonical <$> makeAbsolute path <*> getCurrentDirectory
 
 -- | Given a path (relative or absolute), make it relative to the given
 -- directory, including using @../..@ if necessary.
 makeRelativeToDir :: FilePath -> FilePath -> IO FilePath
 makeRelativeToDir path dir =
-    makeRelativeCanonical <$> canonicalizePath path <*> canonicalizePath dir
+    makeRelativeCanonical <$> makeAbsolute path <*> makeAbsolute dir
 
 -- | Given a canonical absolute path and canonical absolute dir, make the path
 -- relative to the directory, including using @../..@ if necessary. Returns
@@ -264,11 +264,11 @@ byteStringToFilePath bs | bslen `mod` 4 /= 0 = unexpected
 -- throws an error if the path refers to a non-existent file.
 tryCanonicalizePath :: FilePath -> IO FilePath
 tryCanonicalizePath path = do
-  ret <- canonicalizePath path
+  ret <- makeAbsolute path
 #if defined(mingw32_HOST_OS) || MIN_VERSION_directory(1,2,3)
   exists <- liftM2 (||) (doesFileExist ret) (Dir.doesDirectoryExist ret)
   unless exists $
-    IOError.ioError $ IOError.mkIOError IOError.doesNotExistErrorType "canonicalizePath"
+    IOError.ioError $ IOError.mkIOError IOError.doesNotExistErrorType "makeAbsolute"
                         Nothing (Just ret)
 #endif
   return ret
@@ -277,7 +277,7 @@ tryCanonicalizePath path = do
 -- an exception, returns the path argument unmodified.
 canonicalizePathNoThrow :: FilePath -> IO FilePath
 canonicalizePathNoThrow path = do
-  canonicalizePath path `catchIO` (\_ -> return path)
+  makeAbsolute path `catchIO` (\_ -> return path)
 
 --------------------
 -- Modification time
