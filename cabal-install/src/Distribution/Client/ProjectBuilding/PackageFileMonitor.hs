@@ -24,6 +24,7 @@ import Distribution.InstalledPackageInfo (InstalledPackageInfo)
 import Distribution.Simple.LocalBuildInfo
   ( ComponentName (..)
   )
+import Distribution.Simple.Setup (HaddockTarget (ForDevelopment))
 import Distribution.Simple.Utils (removeFileForcibly)
 
 import qualified Data.Set as Set
@@ -100,8 +101,10 @@ packageFileMonitorKeyValues elab =
     -- the specific targets that we're going to build.
     --
 
-    -- Additionally we null out the parts that don't affect the configure step because they're simply
-    -- about how tests or benchmarks are run
+    -- Also clear options passed when running Haddock, tests, or benchmarks.
+    -- In particular, Haddock output options must not force reconfiguration
+    -- when switching between a normal build and haddock-project. Compiler
+    -- and program settings remain part of the key.
 
     -- TODO there may be more things to null here too, in the future.
 
@@ -114,6 +117,25 @@ packageFileMonitorKeyValues elab =
         , elabReplTarget = []
         , elabHaddockTargets = []
         , elabBuildHaddocks = False
+        , elabHaddockHoogle = False
+        , elabHaddockHtml = False
+        , elabHaddockHtmlLocation = Nothing
+        , elabHaddockForeignLibs = False
+        , elabHaddockForHackage = ForDevelopment
+        , elabHaddockExecutables = False
+        , elabHaddockTestSuites = False
+        , elabHaddockBenchmarks = False
+        , elabHaddockInternal = False
+        , elabHaddockCss = Nothing
+        , elabHaddockLinkedSource = False
+        , elabHaddockQuickJump = False
+        , elabHaddockHscolourCss = Nothing
+        , elabHaddockContents = Nothing
+        , elabHaddockIndex = Nothing
+        , elabHaddockBaseUrl = Nothing
+        , elabHaddockResourcesDir = Nothing
+        , elabHaddockOutputDir = Nothing
+        , elabHaddockUseUnicode = False
         , elabTestMachineLog = Nothing
         , elabTestHumanLog = Nothing
         , elabTestShowDetails = Nothing
