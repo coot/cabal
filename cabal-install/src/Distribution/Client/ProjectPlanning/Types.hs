@@ -348,7 +348,15 @@ normaliseConfiguredPackage
   -> ElaboratedConfiguredPackage
   -> ElaboratedConfiguredPackage
 normaliseConfiguredPackage ElaboratedSharedConfig{pkgConfigCompilerProgs} pkg =
-  pkg{elabProgramArgs = Map.mapMaybeWithKey lookupFilter (elabProgramArgs pkg)}
+  pkg
+    { elabProgramArgs = Map.mapMaybeWithKey lookupFilter (elabProgramArgs pkg)
+    , -- Haddock falls back to HTML when neither HTML nor Hoogle is selected.
+      -- Hash documented packages by that effective output, while preserving
+      -- existing hashes for packages built without documentation.
+      elabHaddockHtml =
+        elabHaddockHtml pkg
+          || (elabBuildHaddocks pkg && not (elabHaddockHoogle pkg))
+    }
   where
     knownProgramDb = addKnownPrograms builtinPrograms pkgConfigCompilerProgs
 

@@ -206,6 +206,7 @@ tests config =
       "Flag tests"
       AllFinish
       [ QC.testProperty "documentation source settings" (propHaddockDocumentation config)
+      , QC.testProperty "Haddock HTML defaults preserve dependency hashes" (propHaddockHtmlNormalization config)
       , QC.testProperty "Haddock output settings preserve the configuration cache" (propHaddockConfigurationCache config)
       , testCase "Test Config options for commented options" testConfigOptionComments
       , testCase "Test Ignore Project Flag" testIgnoreProjectFlag
@@ -2154,6 +2155,33 @@ propHaddockDocumentation config0 documentation linkedSource =
               , packageConfigHaddockLinkedSource = maybe Flag.NoFlag Flag linkedSource
               }
         }
+
+-- Implicit HTML and explicit HTML must select the same store instance when
+-- documentation is enabled and Hoogle is not requested. Hoogle-only output
+-- stays distinct from combined output; undocumented package hashes stay intact.
+propHaddockHtmlNormalization :: ProjectConfig -> Bool -> Bool -> QC.Property
+propHaddockHtmlNormalization config0 documentation hoogle =
+  QC.label (show (documentation, hoogle)) $ QC.ioProperty $ do
+    implicit <- dependencyId Flag.NoFlag
+    explicit <- dependencyId (Flag True)
+    cleanProject testdir
+    return $
+      QC.counterexample (show (implicit, explicit)) $
+        (implicit == explicit) QC.=== (documentation && not hoogle)
+  where
+    testdir = "regression/program-options"
+    dependencyId html = do
+      let config =
+            config0
+              { projectConfigAllPackages =
+                  (projectConfigAllPackages config0)
+                    { packageConfigDocumentation = Flag documentation
+                    , packageConfigHaddockHoogle = Flag hoogle
+                    , packageConfigHaddockHtml = html
+                    }
+              }
+      (_, plan, _) <- planProject testdir config
+      installedUnitId <$> expectPlanPackage plan "p-0.1"
 
 -- Haddock options may change in either direction without reconfiguring, but
 -- compiler options must still invalidate the persisted configuration cache.
