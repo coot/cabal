@@ -617,6 +617,7 @@ instance Semigroup SavedConfig where
             haddockProgramPaths = lastNonEmpty haddockProgramPaths
           , -- TODO: NubListify
             haddockProgramArgs = lastNonEmpty haddockProgramArgs
+          , haddockProgramPrependArgs = lastNonEmpty haddockProgramPrependArgs
           , haddockHoogle = combine haddockHoogle
           , haddockHtml = combine haddockHtml
           , haddockHtmlLocation = combine haddockHtmlLocation

@@ -4341,6 +4341,7 @@ setupHsBuildFlags par_strat elab _ common =
     { buildCommonFlags = common
     , buildProgramPaths = mempty -- unused, set at configure time
     , buildProgramArgs = mempty -- unused, set at configure time
+    , buildProgramPrependArgs = mempty
     , buildNumJobs = mempty -- TODO: [nice to have] sometimes want to use toFlag (Just numBuildJobs),
     , buildUseSemaphore =
         if setupCliVersion (elabSetupScriptCliVersion elab) >= mkVersion [3, 11, 0, 0]
@@ -4470,6 +4471,7 @@ setupHsHaddockFlags
                 )
               ]
       , haddockProgramArgs = mempty -- unused, set at configure time
+      , haddockProgramPrependArgs = mempty
       , haddockHoogle = toFlag elabHaddockHoogle
       , haddockHtml = toFlag elabHaddockHtml
       , haddockHtmlLocation = maybeToFlag elabHaddockHtmlLocation

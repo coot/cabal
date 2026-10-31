@@ -1159,6 +1159,8 @@ filterBuildFlags flags cabalLibVersion =
   flags
     { buildCommonFlags =
         filterCommonFlags (buildCommonFlags flags) cabalLibVersion
+    , buildProgramPrependArgs =
+        if cabalLibVersion >= mkVersion [3, 19] then buildProgramPrependArgs flags else []
     }
 
 -- ------------------------------------------------------------
@@ -2471,6 +2473,8 @@ filterHaddockFlags flags cabalLibVersion
               { -- `cabal haddock` knew about `--keep-temp-files` before other commands did.
                 setupKeepTempFiles = setupKeepTempFiles (haddockCommonFlags flags)
               }
+        , haddockProgramPrependArgs =
+            if cabalLibVersion >= mkVersion [3, 19] then haddockProgramPrependArgs flags else []
         }
 
     flags_2_3_0 =

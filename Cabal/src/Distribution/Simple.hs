@@ -501,7 +501,7 @@ buildAction verbHandles globalFlags hooks flags args = do
     preBuild
     buildHook
     postBuild
-    (return lbi{withPrograms = progs})
+    (return lbi{withPrograms = prependProgramArgs (buildProgramPrependArgs flags') progs})
     hooks
     flags'
     args
@@ -571,7 +571,7 @@ haddockAction verbHandles globalFlags hooks flags args = do
     preHaddock
     haddockHook
     postHaddock
-    (return lbi{withPrograms = progs})
+    (return lbi{withPrograms = prependProgramArgs (haddockProgramPrependArgs flags') progs})
     hooks
     flags'
     args
