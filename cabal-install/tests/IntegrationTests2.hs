@@ -11,6 +11,7 @@ import Prelude ()
 import Distribution.Client.DistDirLayout
 import Distribution.Client.HttpUtils
 import qualified Distribution.Client.InstallPlan as InstallPlan
+import qualified Distribution.Client.NixStyleOptions as NixStyleOptions
 import Distribution.Client.ProjectBuilding
 import Distribution.Client.ProjectConfig
 import Distribution.Client.ProjectOrchestration
@@ -58,6 +59,7 @@ import Distribution.InstalledPackageInfo (InstalledPackageInfo)
 import Distribution.ModuleName (ModuleName)
 import Distribution.Package
 import Distribution.PackageDescription
+import Distribution.Simple.Command (commandDefaultFlags)
 import Distribution.Simple.Compiler
 import qualified Distribution.Simple.Flag as Flag
 import Distribution.Simple.Setup (CommonSetupFlags (..), HaddockFlags (..), HaddockProjectFlags (..), defaultCommonSetupFlags, defaultHaddockFlags, defaultHaddockProjectFlags, toFlag)
@@ -76,7 +78,7 @@ import Control.Monad
 import System.Directory
 import System.Environment (setEnv)
 import System.FilePath
-import System.IO (hPutStrLn, stderr)
+import System.IO (hPutStrLn, stderr, stdout)
 import qualified System.Info
 import System.Process (callProcess)
 
@@ -199,6 +201,11 @@ tests config =
       AllFinish
       [ testCase "Test Config options for commented options" testConfigOptionComments
       , testCase "Test Ignore Project Flag" testIgnoreProjectFlag
+      ]
+  , dependentTestGroup
+      "Documentation build cache"
+      AllFinish
+      [ testCase "documentation flags" (testDocumentationFlags config)
       ]
   , dependentTestGroup
       "haddock-project"
@@ -2791,3 +2798,77 @@ testHaddockProjectDependencies config = do
     cleanHaddockProject testdir
   where
     testdir = "haddock-project/dependencies"
+
+-- | Run a test on a documentation build cache test project, from its
+-- directory, unless the compiler predates the documentation artifacts these
+-- tests rely on. The test receives the build directory of the main library of
+-- package @p@. Afterwards the project's build products, documentation and local
+-- configuration are removed, and the module @P@ of @p@ is restored.
+withDocumentationProject :: FilePath -> ProjectConfig -> (FilePath -> IO ()) -> Assertion
+withDocumentationProject testdir config test = do
+  let dir = basedir </> testdir
+      source = dir </> "p" </> "P.hs"
+      clean = cleanHaddockProject testdir >> removeFileForcibly (dir </> "cabal.project.local")
+  originalSource <- BS.readFile source
+  clean
+  flip finally (BS.writeFile source originalSource >> clean) $ do
+    ((layout, _, _, _, _), plan, shared) <- planProject testdir config
+    let safeMinor = if buildOS == Windows then 10 else 4
+    when (compilerVersion (pkgConfigCompiler shared) > mkVersion [9, safeMinor]) $ do
+      pkg <- case filter (\p -> packageName p == mkPackageName "p" && elabComponentName p == Just (CLibName LMainLibName)) (filterConfiguredPackages (InstallPlan.toList plan)) of
+        [p] -> return p
+        _ -> fail "Expected one library p"
+      withCurrentDirectory dir $ test (distBuildDirectory layout (elabDistDirParams shared pkg))
+
+-- | Replace the local configuration of the project in the current directory.
+writeLocalConfig :: [String] -> IO ()
+writeLocalConfig = writeFile "cabal.project.local" . unlines
+
+-- | Common flags of the commands run by documentation build cache tests, which
+-- report the build plans and the compiled modules.
+documentationCommonFlags :: CommonSetupFlags
+documentationCommonFlags = defaultCommonSetupFlags{setupVerbosity = Flag normal}
+
+-- | Build all packages of the project in the current directory, returning the
+-- output.
+buildAllPackages :: IO String
+buildAllPackages =
+  fst
+    <$> hCapture
+      [stdout, stderr]
+      ( CmdBuild.buildAction
+          (NixStyleOptions.updNixStyleCommonSetupFlags (const documentationCommonFlags) (commandDefaultFlags CmdBuild.buildCommand))
+          ["all"]
+          defaultGlobalFlags{globalStoreDir = Flag "store"}
+      )
+
+-- | Documentation adds flags to the compiler invocations, not to the package
+-- configuration: enabling it compiles again, but does not reconfigure. The
+-- same flag given explicitly is a configuration change.
+testDocumentationFlags :: ProjectConfig -> Assertion
+testDocumentationFlags config = withDocumentationProject testdir config $ \buildDir -> do
+  let setupConfig = buildDir </> "setup-config"
+      settings documentation args =
+        writeLocalConfig
+          [ "documentation: " ++ show documentation
+          , "haddock-hyperlink-source: False"
+          , "package *"
+          , "  ghc-options: " ++ unwords args
+          ]
+  settings False []
+  _ <- buildAllPackages
+  initialConfig <- BS.readFile setupConfig
+  settings True []
+  enabled <- buildAllPackages
+  assertBool enabled ("documentation artifacts required" `isInfixOf` enabled)
+  BS.readFile setupConfig >>= assertEqual "setup-config after enabling documentation" initialConfig
+  -- A build that needs fewer flags reuses the artifacts of the last one.
+  settings False []
+  disabled <- buildAllPackages
+  assertBool disabled ("Up to date" `isInfixOf` disabled)
+  settings False ["-haddock"]
+  _ <- buildAllPackages
+  explicitConfig <- BS.readFile setupConfig
+  assertBool "explicit -haddock must reconfigure" (explicitConfig /= initialConfig)
+  where
+    testdir = "documentation-cache/library"

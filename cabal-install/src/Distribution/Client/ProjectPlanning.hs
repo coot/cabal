@@ -2335,11 +2335,18 @@ elaborateInstallPlan
             elabBuildHaddocks =
               perPkgOptionFlag False pkgid packageConfigDocumentation
 
-            -- `documentation: true` should imply `-haddock` for GHC
+            -- These are invocation defaults, not part of setup-config. Keep
+            -- their provenance so explicit user arguments remain in the
+            -- configuration key and retain precedence over these defaults.
+            elabHaddockProgramArgs =
+              ["-haddock" | elabBuildHaddocks]
+
+            -- Older custom Setups cannot accept invocation-only defaults.
+            -- Persist them there, retaining the corresponding reconfiguration.
             addHaddockIfDocumentationEnabled :: ConfiguredProgram -> ConfiguredProgram
             addHaddockIfDocumentationEnabled cp@ConfiguredProgram{..} =
-              if programId == "ghc" && elabBuildHaddocks
-                then cp{programOverrideArgs = "-haddock" : programOverrideArgs}
+              if programId == "ghc" && setupCliVersion elabSetupScriptCliVersion < mkVersion [3, 19]
+                then cp{programOverrideArgs = elabHaddockProgramArgs ++ programOverrideArgs}
                 else cp
 
             elabPkgSourceLocation = srcloc
@@ -4341,7 +4348,7 @@ setupHsBuildFlags par_strat elab _ common =
     { buildCommonFlags = common
     , buildProgramPaths = mempty -- unused, set at configure time
     , buildProgramArgs = mempty -- unused, set at configure time
-    , buildProgramPrependArgs = mempty
+    , buildProgramPrependArgs = setupHsHaddockProgramArgs elab
     , buildNumJobs = mempty -- TODO: [nice to have] sometimes want to use toFlag (Just numBuildJobs),
     , buildUseSemaphore =
         if setupCliVersion (elabSetupScriptCliVersion elab) >= mkVersion [3, 11, 0, 0]
@@ -4349,6 +4356,15 @@ setupHsBuildFlags par_strat elab _ common =
             par_strat
           else mempty
     }
+
+-- | Supply defaults without repeating or overriding the configured arguments.
+-- The fallback for older Setup versions is handled during elaboration.
+setupHsHaddockProgramArgs :: ElaboratedConfiguredPackage -> [(String, [String])]
+setupHsHaddockProgramArgs elab
+  | setupCliVersion (elabSetupScriptCliVersion elab) >= mkVersion [3, 19]
+  , not (null (elabHaddockProgramArgs elab)) =
+      [("ghc", elabHaddockProgramArgs elab)]
+  | otherwise = []
 
 setupHsBuildArgs :: ElaboratedConfiguredPackage -> [String]
 setupHsBuildArgs elab@(ElaboratedConfiguredPackage{elabPkgOrComp = ElabPackage _})
@@ -4455,7 +4471,7 @@ setupHsHaddockFlags
   -> Cabal.CommonSetupFlags
   -> Cabal.HaddockFlags
 setupHsHaddockFlags
-  (ElaboratedConfiguredPackage{..})
+  elab@(ElaboratedConfiguredPackage{..})
   (ElaboratedSharedConfig{..})
   _buildTimeSettings
   common =
@@ -4471,7 +4487,7 @@ setupHsHaddockFlags
                 )
               ]
       , haddockProgramArgs = mempty -- unused, set at configure time
-      , haddockProgramPrependArgs = mempty
+      , haddockProgramPrependArgs = setupHsHaddockProgramArgs elab
       , haddockHoogle = toFlag elabHaddockHoogle
       , haddockHtml = toFlag elabHaddockHtml
       , haddockHtmlLocation = maybeToFlag elabHaddockHtmlLocation
@@ -4625,7 +4641,7 @@ packageHashConfigInputs shared@ElaboratedSharedConfig{..} pkg =
     , pkgHashStripLibs = stripLibs
     , pkgHashStripExes = stripExes
     , pkgHashDebugInfo = withDebugInfo
-    , pkgHashProgramArgs = elabProgramArgs
+    , pkgHashProgramArgs = Map.unionWith (++) (Map.fromList (setupHsHaddockProgramArgs pkg)) elabProgramArgs
     , pkgHashExtraLibDirs = elabExtraLibDirs
     , pkgHashExtraLibDirsStatic = elabExtraLibDirsStatic
     , pkgHashExtraFrameworkDirs = elabExtraFrameworkDirs
