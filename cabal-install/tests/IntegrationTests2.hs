@@ -3131,6 +3131,7 @@ testHaddockProjectBuildCache config = withDocumentationProject "documentation-ca
 
 -- | Check the generated index, including a sublibrary, with an arbitrary custom
 -- build directory and no pre-existing documentation in the default directory.
+-- A repeated invocation must also reuse the sublibrary's compilation artifacts.
 propHaddockProjectBuildDir :: ProjectConfig -> QC.Positive Int -> QC.Property
 propHaddockProjectBuildDir config (QC.Positive suffix) = QC.ioProperty $ do
   (_, _, sharedConfig) <- planProject testdir config
@@ -3159,9 +3160,15 @@ propHaddockProjectBuildDir config (QC.Positive suffix) = QC.ioProperty $ do
         mainInterface <- doesFileExist ("haddocks" </> "index-probe" </> "index-probe.haddock")
         subInterface <- doesFileExist ("haddocks" </> "index-probe" </> "helper" </> "helper.haddock")
         defaultDir <- doesDirectoryExist "dist-newstyle"
+        -- Compilation artifact reuse requires Haddock >= 2.28 (GHC >= 9.6).
+        (repeatedOutput, ()) <-
+          if compilerVersion (pkgConfigCompiler sharedConfig) >= mkVersion [9, 6]
+            then hCapture [stdout, stderr] run
+            else return ("", ())
         return $
-          (mainInterface, subInterface, "MainModule.html" `BS.isInfixOf` index, "HelperModule.html" `BS.isInfixOf` index, defaultDir)
-            QC.=== (True, True, True, True, False)
+          QC.counterexample repeatedOutput $
+            (mainInterface, subInterface, "MainModule.html" `BS.isInfixOf` index, "HelperModule.html" `BS.isInfixOf` index, defaultDir, "Compiling " `isInfixOf` repeatedOutput)
+              QC.=== (True, True, True, True, False, False)
   where
     testdir = "haddock-project/custom-builddir"
 
