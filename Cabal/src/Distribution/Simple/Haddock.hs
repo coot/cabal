@@ -304,6 +304,12 @@ haddock_setupHooks
     let overrideWithOutputDir args = case haddockOutputDir flags of
           NoFlag -> args
           Flag dir -> args{argOutputDir = Dir dir}
+    -- Dependencies documented into the same output directory are linked to
+    -- that documentation; see 'outputDirDocumentation'.
+    workDir <- absoluteWorkingDirLBI lbi
+    let outputDocs =
+          (,) haddockTarget . normalise . interpretSymbolicPathAbsolute workDir . makeSymbolicPath
+            <$> flagToMaybe (haddockOutputDir flags)
     let commonArgs =
           overrideWithOutputDir $
             mconcat
@@ -375,6 +381,7 @@ haddock_setupHooks
                   lbi'
                   clbi
                   htmlTemplate
+                  outputDocs
                   haddockTarget
                   pkg_descr
                   exe
@@ -414,6 +421,7 @@ haddock_setupHooks
                 lbi'
                 clbi
                 htmlTemplate
+                outputDocs
                 haddockTarget
                 pkg_descr
                 lib
@@ -469,6 +477,7 @@ haddock_setupHooks
                       lbi'
                       clbi
                       htmlTemplate
+                      outputDocs
                       haddockTarget
                       pkg_descr
                       flib
@@ -495,6 +504,7 @@ haddock_setupHooks
                   lbi'
                   clbi
                   htmlTemplate
+                  outputDocs
                   haddockTarget
                   pkg_descr
                   test
@@ -519,6 +529,7 @@ haddock_setupHooks
                   lbi'
                   clbi
                   htmlTemplate
+                  outputDocs
                   haddockTarget
                   pkg_descr
                   bench
@@ -709,10 +720,12 @@ mkHaddockArgs
   -> ComponentLocalBuildInfo
   -> Maybe PathTemplate
   -- ^ template for HTML location
+  -> Maybe (HaddockTarget, FilePath)
+  -- ^ output directory to look for documentation of dependencies in
   -> [SymbolicPath Pkg File]
   -> BuildInfo
   -> IO HaddockArgs
-mkHaddockArgs verbosity (tmpObjDir, tmpHiDir, tmpStubDir) lbi clbi htmlTemplate inFiles bi = do
+mkHaddockArgs verbosity (tmpObjDir, tmpHiDir, tmpStubDir) lbi clbi htmlTemplate outputDocs inFiles bi = do
   (ghcProg, _) <- requireProgram verbosity ghcProgram (withPrograms lbi)
   let
     vanillaOpts' =
@@ -732,7 +745,7 @@ mkHaddockArgs verbosity (tmpObjDir, tmpHiDir, tmpStubDir) lbi clbi htmlTemplate 
         , ghcOptObjSuffix = toFlag "dyn_o"
         , ghcOptExtra = ghcOptExtra vanillaOpts ++ map T.unpack (hcSharedOptions GHC bi)
         }
-  ifaceArgs <- getInterfaces verbosity lbi clbi htmlTemplate
+  ifaceArgs <- getInterfaces verbosity lbi clbi htmlTemplate outputDocs
   opts <-
     if withVanillaLib lbi
       then return vanillaOpts{ghcOptExtra = ghcOptExtra vanillaOpts ++ map T.unpack (hcStaticOptions GHC bi)}
@@ -758,13 +771,15 @@ fromLibrary
   -> ComponentLocalBuildInfo
   -> Maybe PathTemplate
   -- ^ template for HTML location
+  -> Maybe (HaddockTarget, FilePath)
+  -- ^ output directory to look for documentation of dependencies in
   -> HaddockTarget
   -> PackageDescription
   -> Library
   -> HaddockArgs
   -- ^ common args
   -> IO HaddockArgs
-fromLibrary verbosity haddockArtifactsDirs lbi clbi htmlTemplate haddockTarget pkg_descr lib commonArgs = do
+fromLibrary verbosity haddockArtifactsDirs lbi clbi htmlTemplate outputDocs haddockTarget pkg_descr lib commonArgs = do
   inFiles <- map snd `fmap` getLibSourceFiles verbosity lbi lib clbi
   args <-
     mkHaddockArgs
@@ -773,6 +788,7 @@ fromLibrary verbosity haddockArtifactsDirs lbi clbi htmlTemplate haddockTarget p
       lbi
       clbi
       htmlTemplate
+      outputDocs
       inFiles
       (libBuildInfo lib)
   let args' =
@@ -809,13 +825,15 @@ fromExecutable
   -> ComponentLocalBuildInfo
   -> Maybe PathTemplate
   -- ^ template for HTML location
+  -> Maybe (HaddockTarget, FilePath)
+  -- ^ output directory to look for documentation of dependencies in
   -> HaddockTarget
   -> PackageDescription
   -> Executable
   -> HaddockArgs
   -- ^ common args
   -> IO HaddockArgs
-fromExecutable verbosity haddockArtifactsDirs lbi clbi htmlTemplate haddockTarget pkg_descr exe commonArgs = do
+fromExecutable verbosity haddockArtifactsDirs lbi clbi htmlTemplate outputDocs haddockTarget pkg_descr exe commonArgs = do
   inFiles <- map snd `fmap` getExeSourceFiles verbosity lbi exe clbi
   args <-
     mkHaddockArgs
@@ -824,6 +842,7 @@ fromExecutable verbosity haddockArtifactsDirs lbi clbi htmlTemplate haddockTarge
       lbi
       clbi
       htmlTemplate
+      outputDocs
       inFiles
       (buildInfo exe)
   let args' =
@@ -858,13 +877,15 @@ fromTest
   -> ComponentLocalBuildInfo
   -> Maybe PathTemplate
   -- ^ template for HTML location
+  -> Maybe (HaddockTarget, FilePath)
+  -- ^ output directory to look for documentation of dependencies in
   -> HaddockTarget
   -> PackageDescription
   -> TestSuite
   -> HaddockArgs
   -- ^ common args
   -> IO HaddockArgs
-fromTest verbosity haddockArtifactsDirs lbi clbi htmlTemplate haddockTarget pkg_descr test commonArgs = do
+fromTest verbosity haddockArtifactsDirs lbi clbi htmlTemplate outputDocs haddockTarget pkg_descr test commonArgs = do
   inFiles <- map snd `fmap` getTestSourceFiles verbosity lbi test clbi
   args <-
     mkHaddockArgs
@@ -873,6 +894,7 @@ fromTest verbosity haddockArtifactsDirs lbi clbi htmlTemplate haddockTarget pkg_
       lbi
       clbi
       htmlTemplate
+      outputDocs
       inFiles
       (testBuildInfo test)
   let args' =
@@ -908,13 +930,15 @@ fromBenchmark
   -> ComponentLocalBuildInfo
   -> Maybe PathTemplate
   -- ^ template for HTML location
+  -> Maybe (HaddockTarget, FilePath)
+  -- ^ output directory to look for documentation of dependencies in
   -> HaddockTarget
   -> PackageDescription
   -> Benchmark
   -> HaddockArgs
   -- ^ common args
   -> IO HaddockArgs
-fromBenchmark verbosity haddockArtifactsDirs lbi clbi htmlTemplate haddockTarget pkg_descr bench commonArgs = do
+fromBenchmark verbosity haddockArtifactsDirs lbi clbi htmlTemplate outputDocs haddockTarget pkg_descr bench commonArgs = do
   inFiles <- map snd `fmap` getBenchmarkSourceFiles verbosity lbi bench clbi
   args <-
     mkHaddockArgs
@@ -923,6 +947,7 @@ fromBenchmark verbosity haddockArtifactsDirs lbi clbi htmlTemplate haddockTarget
       lbi
       clbi
       htmlTemplate
+      outputDocs
       inFiles
       (benchmarkBuildInfo bench)
   let args' =
@@ -958,13 +983,15 @@ fromForeignLib
   -> ComponentLocalBuildInfo
   -> Maybe PathTemplate
   -- ^ template for HTML location
+  -> Maybe (HaddockTarget, FilePath)
+  -- ^ output directory to look for documentation of dependencies in
   -> HaddockTarget
   -> PackageDescription
   -> ForeignLib
   -> HaddockArgs
   -- ^ common args
   -> IO HaddockArgs
-fromForeignLib verbosity haddockArtifactsDirs lbi clbi htmlTemplate haddockTarget pkg_descr flib commonArgs = do
+fromForeignLib verbosity haddockArtifactsDirs lbi clbi htmlTemplate outputDocs haddockTarget pkg_descr flib commonArgs = do
   inFiles <- map snd `fmap` getFLibSourceFiles verbosity lbi flib clbi
   args <-
     mkHaddockArgs
@@ -973,6 +1000,7 @@ fromForeignLib verbosity haddockArtifactsDirs lbi clbi htmlTemplate haddockTarge
       lbi
       clbi
       htmlTemplate
+      outputDocs
       inFiles
       (foreignLibBuildInfo flib)
   let args' =
@@ -1026,9 +1054,11 @@ getInterfaces
   -> ComponentLocalBuildInfo
   -> Maybe PathTemplate
   -- ^ template for HTML location
+  -> Maybe (HaddockTarget, FilePath)
+  -- ^ output directory to look for documentation of dependencies in
   -> IO HaddockArgs
-getInterfaces verbosity lbi clbi htmlTemplate = do
-  (packageFlags, warnings) <- haddockPackageFlags verbosity lbi clbi htmlTemplate
+getInterfaces verbosity lbi clbi htmlTemplate outputDocs = do
+  (packageFlags, warnings) <- haddockPackageFlags verbosity lbi clbi htmlTemplate outputDocs
   traverse_ (warn (modifyVerbosityFlags verboseUnmarkOutput verbosity)) warnings
   return $
     mempty
@@ -1480,6 +1510,9 @@ haddockPackageFlags
   -> LocalBuildInfo
   -> ComponentLocalBuildInfo
   -> Maybe PathTemplate
+  -> Maybe (HaddockTarget, FilePath)
+  -- ^ The target and the absolute output directory of the documentation, when
+  -- given by @--haddock-output-dir@; see 'outputDirDocumentation'.
   -> IO
       ( [ ( FilePath -- path to interface
       -- file
@@ -1493,7 +1526,7 @@ haddockPackageFlags
       , Maybe String -- warning about
       -- missing documentation
       )
-haddockPackageFlags verbosity lbi clbi htmlTemplate = do
+haddockPackageFlags verbosity lbi clbi htmlTemplate outputDocs = do
   let allPkgs = installedPkgs lbi
       directDeps = map fst (componentPackageDeps clbi)
   transitiveDeps <- case PackageIndex.dependencyClosure allPkgs directDeps of
@@ -1501,12 +1534,40 @@ haddockPackageFlags verbosity lbi clbi htmlTemplate = do
     Right inf ->
       dieWithException verbosity $ HaddockPackageFlags inf
 
-  haddockPackagePaths (PackageIndex.allPackages transitiveDeps) mkHtmlPath
+  deps <-
+    traverse
+      (maybe return outputDirDocumentation outputDocs)
+      (PackageIndex.allPackages transitiveDeps)
+  haddockPackagePaths deps mkHtmlPath
   where
     mkHtmlPath = fmap expandTemplateVars htmlTemplate
     expandTemplateVars tmpl pkg =
       fromPathTemplate . substPathTemplate (env pkg) $ tmpl
     env pkg = haddockTemplateEnv lbi (packageId pkg)
+
+-- | Use the documentation of a dependency found in the output directory, at
+-- the location where Haddock documentation of the library is generated there,
+-- instead of its registered documentation. Packages documented into the same
+-- output directory, e.g. by @haddock-project@, then link to each other there,
+-- even when their registered documentation is missing, or was generated with
+-- different settings.
+outputDirDocumentation
+  :: (HaddockTarget, FilePath)
+  -> InstalledPackageInfo
+  -> IO InstalledPackageInfo
+outputDirDocumentation (haddockTarget, outputDir) ipkg = do
+  let lib_name = InstalledPackageInfo.sourceLibName ipkg
+      docDir = outputDir </> haddockLibraryDirPath' haddockTarget (packageId ipkg) lib_name
+      interface = docDir </> haddockLibraryPath' (packageName ipkg) lib_name
+  exists <- doesFileExist interface
+  return $
+    if exists
+      then
+        ipkg
+          { InstalledPackageInfo.haddockInterfaces = [interface]
+          , InstalledPackageInfo.haddockHTMLs = [docDir]
+          }
+      else ipkg
 
 haddockTemplateEnv :: LocalBuildInfo -> PackageIdentifier -> PathTemplateEnv
 haddockTemplateEnv lbi pkg_id =

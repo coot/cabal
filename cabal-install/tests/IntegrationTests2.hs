@@ -220,6 +220,11 @@ tests config =
       , testCase "documenting a chain of dependencies" (testHaddockDependencyChainBuildCache config)
       ]
   , dependentTestGroup
+      "Documentation output directory"
+      AllFinish
+      [ testCase "links to dependencies" (testHaddockOutputDirLinks config)
+      ]
+  , dependentTestGroup
       "haddock-project"
       AllFinish
       [ testCase "dependencies" (testHaddockProjectDependencies config)
@@ -3110,6 +3115,28 @@ testHaddockSublibraryBuildCache config =
 testHaddockDependencyChainBuildCache :: ProjectConfig -> Assertion
 testHaddockDependencyChainBuildCache config =
   withDocumentationProject "documentation-cache/chain" config (const assertBuildUpToDateAfterHaddock)
+
+-- | Assert that an HTML page links to each of the given files.
+assertLinksTo :: FilePath -> [FilePath] -> Assertion
+assertLinksTo page targets = do
+  html <- slashes <$> readFile page
+  for_ targets $ \target ->
+    assertBool (page ++ " must link to " ++ target) (slashes target `isInfixOf` html)
+  where
+    slashes = map (\c -> if c == '\\' then '/' else c)
+
+-- | Packages documented into the same output directory link to their
+-- documentation there, including that of a sublibrary.
+testHaddockOutputDirLinks :: ProjectConfig -> Assertion
+testHaddockOutputDirLinks config = withDocumentationProject "haddock-output-dir" config $ \_ -> do
+  writeLocalConfig ["haddock-output-dir: haddocks"]
+  _ <- documentAllPackages
+  docs <- makeAbsolute "haddocks"
+  assertLinksTo
+    ("haddocks" </> "q" </> "Q.html")
+    [ docs </> "p" </> "P.html#t:Value"
+    , docs </> "p" </> "helper" </> "Helper.html#t:Helper"
+    ]
 
 -- | Repeating haddock-project has no build work, and leaves a normal build up
 -- to date. Its build phase prints a plan only when it has work to do, so each

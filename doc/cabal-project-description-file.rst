@@ -1875,6 +1875,13 @@ running ``setup haddock``.
     Generate haddock documentation into this directory instead of the default
     location next to other build products.
 
+    The documentation of a package is placed in a subdirectory named after the
+    package, and that of its sublibraries and other components in
+    subdirectories of it, named after the component. Dependencies whose
+    documentation is found at its location in this directory, for example
+    because they are documented into the same directory, are linked to there,
+    instead of to their installed documentation.
+
     This flag is provided as a technology preview and is subject to change in the
     next releases.
 
