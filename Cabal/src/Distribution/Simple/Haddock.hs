@@ -706,9 +706,11 @@ here, that is, there doesn't seem to be a GHC flag that could accidentally make
 a stub file incompatible with the one produced by GHC from the same module.
 
 Both the copied artifacts and the original directories passed to Haddock must
-come from the component build directory. In particular, sublibraries build in
-a subdirectory of buildDir, so using buildDir would copy their interfaces into
-the wrong place and change the -stubdir and -hiedir options.
+come from the directory in which GHC compiled the component, see
+'componentArtifactsDir'. Sublibraries build in a subdirectory of buildDir, and
+executables, test suites and benchmarks in a @<name>-tmp@ subdirectory of their
+component build directory. Using any other directory would copy their
+interfaces into the wrong place and change the -stubdir and -hiedir options.
 -}
 
 mkHaddockArgs
@@ -729,7 +731,7 @@ mkHaddockArgs verbosity (tmpObjDir, tmpHiDir, tmpStubDir) lbi clbi htmlTemplate 
   (ghcProg, _) <- requireProgram verbosity ghcProgram (withPrograms lbi)
   let
     vanillaOpts' =
-      componentGhcOptions Normal lbi bi clbi (componentBuildDir lbi clbi)
+      componentGhcOptions Normal lbi bi clbi (componentArtifactsDir lbi clbi)
     vanillaOpts =
       vanillaOpts'
         { -- See Note [Hi Haddock Recompilation Avoidance]
@@ -1109,7 +1111,7 @@ reusingGHCCompilationArtifacts verbosity tmpFileOpts mbWorkDir lbi bi clbi versi
           -- Re-use ghc's interface and obj files, but first copy them to
           -- somewhere where it is safe if haddock overwrites them
           let
-            vanillaOpts = componentGhcOptions Normal lbi bi clbi (componentBuildDir lbi clbi)
+            vanillaOpts = componentGhcOptions Normal lbi bi clbi (componentArtifactsDir lbi clbi)
             i = interpretSymbolicPath mbWorkDir
             copyDir getGhcDir tmpDir = do
               let ghcDir = i $ fromFlag $ getGhcDir vanillaOpts

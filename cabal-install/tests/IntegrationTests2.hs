@@ -218,6 +218,7 @@ tests config =
       , testCase "documenting packages" (testHaddockBuildCache config)
       , testCase "documenting a sublibrary dependency" (testHaddockSublibraryBuildCache config)
       , testCase "documenting a chain of dependencies" (testHaddockDependencyChainBuildCache config)
+      , testCase "documenting an executable" (testHaddockExecutableArtifacts config)
       ]
   , dependentTestGroup
       "Documentation output directory"
@@ -3116,6 +3117,20 @@ testHaddockSublibraryBuildCache config =
 testHaddockDependencyChainBuildCache :: ProjectConfig -> Assertion
 testHaddockDependencyChainBuildCache config =
   withDocumentationProject "documentation-cache/chain" config (const assertBuildUpToDateAfterHaddock)
+
+-- | Haddock must use the compilation artifacts of an executable from the
+-- directory GHC compiled it in, which is a subdirectory of its build
+-- directory, rather than write HIE files into the build directory itself.
+testHaddockExecutableArtifacts :: ProjectConfig -> Assertion
+testHaddockExecutableArtifacts config = withDocumentationProject "documentation-cache/executable" config $ \buildDir -> do
+  let exeDir = buildDir </> "x" </> "e" </> "build" </> "e"
+  writeLocalConfig ["documentation: True", "package p", "  haddock-executables: True"]
+  _ <- buildAllPackages
+  _ <- documentAllPackages
+  doesFileExist (exeDir </> "e-tmp" </> "extra-compilation-artifacts" </> "hie" </> "Main.hie")
+    >>= assertBool "HIE file of the executable"
+  doesDirectoryExist (exeDir </> "extra-compilation-artifacts")
+    >>= assertEqual "artifacts outside the executable's compilation directory" False
 
 -- | Assert that an HTML page links to each of the given files.
 assertLinksTo :: FilePath -> [FilePath] -> Assertion
