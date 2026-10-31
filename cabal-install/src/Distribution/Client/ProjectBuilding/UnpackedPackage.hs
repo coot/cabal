@@ -583,10 +583,13 @@ buildInplaceUnpackedPackage
               return mbLBI
           PBBuildPhase{runBuild} ->
             whenRebuild $ withFileMonitor runBuild
-          PBReplPhase{runRepl} ->
-            withFileMonitor runRepl
+          PBReplPhase{runRepl} -> do
+            -- A repl can replace compiler artifacts but does not complete a
+            -- normal build. Do not keep a previous successful cache valid.
+            invalidatePackageBuildFileMonitor packageFileMonitor
+            withoutBuildMonitor runRepl
           PBHaddockPhase{runHaddock} -> do
-            withFileMonitor runHaddock
+            withoutBuildMonitor runHaddock
             updatePackageDocsFileMonitor packageFileMonitor (getSymbolicPath srcdir) pkg
             let haddockTarget = elabHaddockForHackage pkg
             when (haddockTarget == Cabal.ForHackage) $ do
@@ -651,6 +654,10 @@ buildInplaceUnpackedPackage
       dparams = elabDistDirParams pkgshared pkg
 
       packageFileMonitor = newPackageFileMonitor pkgshared distDirLayout dparams
+
+      withoutBuildMonitor :: IO [MonitorFilePath] -> IO ()
+      withoutBuildMonitor runAction =
+        void runAction `onException` invalidatePackageRegFileMonitor packageFileMonitor
 
       withFileMonitor :: IO [MonitorFilePath] -> IO ()
       withFileMonitor runAction = do
