@@ -3412,12 +3412,25 @@ pkgHasEphemeralBuildTargets elab =
 -- | The components that we'll build all of, meaning that after they're built
 -- we can skip building them again (unlike with building just some modules or
 -- other files within a component).
+--
+-- A per-component package builds its own component, whatever its targets are
+-- called. Targets required by reverse dependencies name the default library
+-- even for a sublibrary, so use the component's own name. Otherwise the build
+-- cache key depends on whether the sublibrary was selected by the user (as in
+-- @cabal build all@) or only needed by another target (as in @cabal haddock@).
 elabBuildTargetWholeComponents
   :: ElaboratedConfiguredPackage
   -> Set ComponentName
 elabBuildTargetWholeComponents elab =
   Set.fromList
-    [cname | ComponentTarget cname WholeComponent <- elabBuildTargets elab]
+    [ ownName cname
+    | ComponentTarget cname WholeComponent <- elabBuildTargets elab
+    ]
+  where
+    ownName cname =
+      case elabPkgOrComp elab of
+        ElabComponent comp -> fromMaybe cname (compComponentName comp)
+        ElabPackage _ -> cname
 
 ------------------------------------------------------------------------------
 

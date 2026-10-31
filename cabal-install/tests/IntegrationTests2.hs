@@ -216,6 +216,7 @@ tests config =
       , testCase "hyperlinked source" (testHyperlinkedSourceArtifacts config)
       , testCase "Haddock output settings" (testHaddockOutputSettings config)
       , testCase "documenting packages" (testHaddockBuildCache config)
+      , testCase "documenting a sublibrary dependency" (testHaddockSublibraryBuildCache config)
       ]
   , dependentTestGroup
       "haddock-project"
@@ -3089,3 +3090,9 @@ testHaddockBuildCache config = withDocumentationProject "documentation-cache/lib
   BS.writeFile ("p" </> "P.hs") original
   reverted <- buildAllPackages
   assertBool reverted ("Compiling P" `isInfixOf` reverted)
+
+-- | A sublibrary that is only compiled while documenting because another
+-- target depends on it must be recorded as a normal build records it.
+testHaddockSublibraryBuildCache :: ProjectConfig -> Assertion
+testHaddockSublibraryBuildCache config =
+  withDocumentationProject "documentation-cache/sublibrary" config (const assertBuildUpToDateAfterHaddock)
