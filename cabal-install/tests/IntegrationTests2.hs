@@ -229,6 +229,7 @@ tests config =
       AllFinish
       [ testCase "dependencies" (testHaddockProjectDependencies config)
       , testCase "repeated runs" (testHaddockProjectBuildCache config)
+      , testCase "output directory" (testHaddockProjectOutputDir config)
       , localOption (QC.QuickCheckTests 5) $
           QC.testProperty "custom build directory" (propHaddockProjectBuildDir config)
       , localOption (QC.QuickCheckTests 10) $
@@ -3157,6 +3158,31 @@ testHaddockProjectBuildCache config = withDocumentationProject "documentation-ca
   replicateM_ 2 $ do
     output <- buildAllPackages
     assertBool output ("Up to date" `isInfixOf` output)
+
+-- | haddock-project documents local packages directly into its output
+-- directory, where their hyperlinked sources link to each other, and leaves
+-- the documentation of a build as it is.
+testHaddockProjectOutputDir :: ProjectConfig -> Assertion
+testHaddockProjectOutputDir config = withDocumentationProject "haddock-output-dir" config $ \buildDir -> do
+  writeLocalConfig ["documentation: True"]
+  _ <- buildAllPackages
+  let buildDocs = buildDir </> "doc" </> "html" </> "p" </> "P.html"
+  original <- BS.readFile buildDocs
+  (haddockOutput, ()) <-
+    hCapture [stdout, stderr] $
+      CmdHaddockProject.haddockProjectAction
+        defaultHaddockProjectFlags{haddockProjectCommonFlags = documentationCommonFlags}
+        ["all"]
+        defaultGlobalFlags{globalStoreDir = Flag "store"}
+  BS.readFile buildDocs >>= assertEqual (haddockOutput ++ "documentation of the build") original
+  docs <- makeAbsolute "haddocks"
+  assertLinksTo
+    ("haddocks" </> "q" </> "src" </> "Q.html")
+    [ docs </> "p" </> "src" </> "P.html"
+    , docs </> "p" </> "helper" </> "src" </> "Helper.html"
+    ]
+  output <- buildAllPackages
+  assertBool output ("Up to date" `isInfixOf` output)
 
 -- | Check the generated index, including a sublibrary, with an arbitrary custom
 -- build directory and no pre-existing documentation in the default directory.

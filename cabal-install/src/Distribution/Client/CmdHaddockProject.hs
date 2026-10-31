@@ -17,7 +17,6 @@ import qualified Data.Map as Map
 import Distribution.Client.DistDirLayout
   ( CabalDirLayout (..)
   , StoreDirLayout (..)
-  , distBuildDirectory
   )
 import Distribution.Client.InstallPlan (foldPlanPackage)
 import qualified Distribution.Client.InstallPlan as InstallPlan
@@ -46,9 +45,6 @@ import Distribution.Client.ProjectPlanning
   , ElaboratedInstallPlan
   , ElaboratedSharedConfig (..)
   , TargetAction (..)
-  )
-import Distribution.Client.ProjectPlanning.Types
-  ( elabDistDirParams
   )
 import Distribution.Client.ScriptUtils
   ( AcceptNoTargets (..)
@@ -125,14 +121,22 @@ import System.FilePath (normalise, takeDirectory, (</>))
 haddockProjectAction :: HaddockProjectFlags -> [String] -> GlobalFlags -> IO ()
 haddockProjectAction flags _extraArgs globalFlags = do
   -- create destination directory if it does not exist
-  let outputDir = normalise $ fromFlag (haddockProjectDir flags)
+  outputDir <- makeAbsolute $ normalise $ fromFlag (haddockProjectDir flags)
   createDirectoryIfMissingVerbose verbosity True outputDir
 
   warn verbosity "haddock-project command is experimental, it might break in the future"
 
   -- Resolve CLI paths before Setup changes the working directory.
   absoluteCss <- traverse makeAbsolute (haddockCss haddockFlags)
-  let projectHaddockFlags = haddockFlags{haddockCss = absoluteCss}
+  let projectHaddockFlags =
+        haddockFlags
+          { haddockCss = absoluteCss
+          , -- Document local packages directly into the destination folder,
+            -- with the same layout, so that they link to the haddocks there,
+            -- and the documentation of the build in `dist-newstyle` is left
+            -- as it is.
+            haddockOutputDir = Flag outputDir
+          }
       localOverrides =
         projectConfigLocalPackages $
           commandLineFlagsToProjectConfig
@@ -195,7 +199,6 @@ haddockProjectAction flags _extraArgs globalFlags = do
                         projectConfigLocalPackages config <> localOverrides <> cliProgramConfig <> docOverride
                     }
               }
-          distLayout = distDirLayout buildBaseCtx
           cabalLayout = cabalDirLayout buildBaseCtx
       buildCtx <-
         runProjectPreBuildPhase verbosity buildBaseCtx $ \elaboratedPlan -> do
@@ -256,6 +259,49 @@ haddockProjectAction flags _extraArgs globalFlags = do
         runProjectPostBuildPhase verbosity buildBaseCtx buildCtx buildOutcomes
 
       --
+      -- Copy haddocks of dependencies to the destination folder, where the
+      -- haddocks of local packages will link to them
+      --
+
+      dependencyInfos <-
+        for pkgs $
+          \case
+            Left package | localStyle -> do
+              let packageName = unPackageName (pkgName $ sourcePackageId package)
+                  destDir = outputDir </> packageName
+              fmap catMaybes $ for (haddockInterfaces package) $ \interfacePath -> do
+                let docDir = takeDirectory interfacePath
+                a <- doesFileExist interfacePath
+                case a of
+                  True -> do
+                    copyDirectoryRecursive verbosity docDir destDir
+                    return $ Just $ Right (packageName, interfacePath, Hidden)
+                  False -> return Nothing
+            Right package
+              | localStyle && not (elabLocalToProject package) -> do
+                  let pkg_descr = elabPkgDescription package
+                      unitId = unUnitId (elabUnitId package)
+                      packageDir =
+                        storePackageDirectory
+                          (cabalStoreDirLayout cabalLayout)
+                          (pkgConfigCompiler sharedConfig')
+                          (elabUnitId package)
+                      -- TODO: use `InstallDirTemplates`
+                      docDir = packageDir </> "share" </> "doc" </> "html"
+                      destDir = outputDir </> haddockDirName ForDevelopment pkg_descr
+                      interfacePath = destDir </> haddockPath pkg_descr
+                  a <- doesDirectoryExist docDir
+                  case a of
+                    True -> do
+                      copyDirectoryRecursive verbosity docDir destDir
+                      -- non local packages will be hidden in haddock's
+                      -- generated contents page
+                      return [Right (unitId, interfacePath, Hidden)]
+                    False -> do
+                      return [Left unitId]
+            _ -> return []
+
+      --
       -- Build haddocks of each components
       --
 
@@ -277,29 +323,16 @@ haddockProjectAction flags _extraArgs globalFlags = do
         targetSelectors
 
       --
-      -- Copy haddocks to the destination folder
+      -- Collect the haddocks of local packages, built in the destination
+      -- folder
       --
 
-      packageInfos <- fmap (nub . concat) $
+      localInfos <-
         for pkgs $
           \case
-            Left package | localStyle -> do
-              let packageName = unPackageName (pkgName $ sourcePackageId package)
-                  destDir = outputDir </> packageName
-              fmap catMaybes $ for (haddockInterfaces package) $ \interfacePath -> do
-                let docDir = takeDirectory interfacePath
-                a <- doesFileExist interfacePath
-                case a of
-                  True -> do
-                    copyDirectoryRecursive verbosity docDir destDir
-                    return $ Just $ Right (packageName, interfacePath, Hidden)
-                  False -> return Nothing
-            Left _ -> return []
-            Right package ->
-              case elabLocalToProject package of
-                True -> do
-                  let distDirParams = elabDistDirParams sharedConfig' package
-                      pkg_descr = elabPkgDescription package
+            Right package
+              | elabLocalToProject package -> do
+                  let pkg_descr = elabPkgDescription package
 
                       packageName = pkgName $ elabPkgSourceId package
                       unitId = elabUnitId package
@@ -307,17 +340,9 @@ haddockProjectAction flags _extraArgs globalFlags = do
                       destDir = outputDir </> packageDir
                       interfacePath = destDir </> haddockPath pkg_descr
 
-                      buildDir = distBuildDirectory distLayout distDirParams
-                      docDir =
-                        buildDir
-                          </> "doc"
-                          </> "html"
-                          </> packageDir
-
-                  a <- doesDirectoryExist docDir
+                  a <- doesDirectoryExist destDir
                   if a
                     then do
-                      copyDirectoryRecursive verbosity docDir destDir
                       let infos :: [(String, FilePath, Visibility)]
                           infos =
                             (unPackageName packageName, interfacePath, Visible)
@@ -364,30 +389,10 @@ haddockProjectAction flags _extraArgs globalFlags = do
                             ++ " not found in the store"
                         )
                       return []
-                False
-                  | not localStyle ->
-                      return []
-                False -> do
-                  let pkg_descr = elabPkgDescription package
-                      unitId = unUnitId (elabUnitId package)
-                      packageDir =
-                        storePackageDirectory
-                          (cabalStoreDirLayout cabalLayout)
-                          (pkgConfigCompiler sharedConfig')
-                          (elabUnitId package)
-                      -- TODO: use `InstallDirTemplates`
-                      docDir = packageDir </> "share" </> "doc" </> "html"
-                      destDir = outputDir </> haddockDirName ForDevelopment pkg_descr
-                      interfacePath = destDir </> haddockPath pkg_descr
-                  a <- doesDirectoryExist docDir
-                  case a of
-                    True -> do
-                      copyDirectoryRecursive verbosity docDir destDir
-                      -- non local packages will be hidden in haddock's
-                      -- generated contents page
-                      return [Right (unitId, interfacePath, Hidden)]
-                    False -> do
-                      return [Left unitId]
+            _ -> return []
+
+      -- In the order of the plan.
+      let packageInfos = nub (concat (zipWith (++) dependencyInfos localInfos))
 
       --
       -- generate index, content, etc.
@@ -478,10 +483,6 @@ haddockProjectAction flags _extraArgs globalFlags = do
               else NoFlag
         , haddockResourcesDir = haddockProjectResourcesDir flags
         , haddockUseUnicode = haddockProjectUseUnicode flags
-        -- NOTE: we don't pass `haddockOutputDir`. If we do, we'll need to
-        -- make sure `InstalledPackageInfo` contains the right path to
-        -- haddock interfaces.  Instead we build documentation inside
-        -- `dist-newstyle` directory and copy it to the output directory.
         }
 
     -- Discover the project without adding documentation options to dependencies.
