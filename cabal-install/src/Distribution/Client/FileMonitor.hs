@@ -48,8 +48,9 @@ import Distribution.Client.HashValue
 import Distribution.Client.Utils (MergeResult (..), mergeBy)
 import Distribution.Compat.Time
 import Distribution.Simple.FileMonitor.Types
-import Distribution.Simple.Utils (handleDoesNotExist, writeFileAtomic)
+import Distribution.Simple.Utils (handleDoesNotExist, rewriteFileLBS)
 import Distribution.Utils.Structured (Tag (..), structuredEncode)
+import Distribution.Verbosity (defaultVerbosityHandles, mkVerbosity, silent)
 
 import System.Directory
 import System.FilePath
@@ -435,6 +436,12 @@ withCacheFile (FileMonitor{fileMonitorCacheFile}) k =
 -- | Helper for writing the cache file.
 --
 -- This determines the type and format of the binary cache file.
+--
+-- An unchanged cache file is left alone, preserving its modification time.
+-- Other monitors record that time: a package's build cache file is monitored
+-- by the packages that depend on it. Rewriting identical content would change
+-- their cache files in turn, and so invalidate dependents that were not rebuilt
+-- in the same run, e.g. after a Haddock run that only needed to check a build.
 rewriteCacheFile
   :: (Binary a, Structured a, Binary b, Structured b)
   => FileMonitor a b
@@ -443,7 +450,7 @@ rewriteCacheFile
   -> b
   -> IO ()
 rewriteCacheFile FileMonitor{fileMonitorCacheFile} fileset key result =
-  writeFileAtomic fileMonitorCacheFile $
+  rewriteFileLBS (mkVerbosity defaultVerbosityHandles silent) fileMonitorCacheFile $
     structuredEncode (fileset, key, result)
 
 -- | Probe the file system to see if any of the monitored files have changed.

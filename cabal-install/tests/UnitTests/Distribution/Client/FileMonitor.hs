@@ -89,6 +89,7 @@ tests mtimeChange =
   , testCase "value changed" testValueChanged
   , testCase "value & file changed" $ testValueAndFileChanged mtimeChange
   , testCase "value updated" testValueUpdated
+  , testCase "unchanged cache file" $ testUnchangedCacheFile mtimeChange
   ]
   where
     knownBrokenInWindows msg = case buildOS of
@@ -922,6 +923,22 @@ testValueUpdated =
 
     reason <- expectMonitorChanged root monitor' (Set.fromList [42, 44])
     reason @?= MonitoredValueChanged (Set.fromList [42, 43])
+
+-- | Updating a monitor without any change leaves its cache file alone, as other
+-- monitors record its modification time.
+testUnchangedCacheFile :: Int -> Assertion
+testUnchangedCacheFile mtimeChange =
+  withFileMonitor $ \root monitor -> do
+    touchFile root "a"
+    updateMonitor root monitor [monitorFile "a"] (42 :: Int) "ok"
+    let cacheFile = fileMonitorCacheFile monitor
+    mtime <- IO.getModificationTime cacheFile
+    threadDelay mtimeChange
+    updateMonitor root monitor [monitorFile "a"] 42 "ok"
+    IO.getModificationTime cacheFile >>= (@?= mtime)
+    updateMonitor root monitor [monitorFile "a"] 43 "ok"
+    changed <- IO.getModificationTime cacheFile
+    assertBool "a changed cache file must be rewritten" (changed /= mtime)
 
 -------------
 -- Utils

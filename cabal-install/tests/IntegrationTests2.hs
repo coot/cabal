@@ -217,6 +217,7 @@ tests config =
       , testCase "Haddock output settings" (testHaddockOutputSettings config)
       , testCase "documenting packages" (testHaddockBuildCache config)
       , testCase "documenting a sublibrary dependency" (testHaddockSublibraryBuildCache config)
+      , testCase "documenting a chain of dependencies" (testHaddockDependencyChainBuildCache config)
       ]
   , dependentTestGroup
       "haddock-project"
@@ -3096,3 +3097,9 @@ testHaddockBuildCache config = withDocumentationProject "documentation-cache/lib
 testHaddockSublibraryBuildCache :: ProjectConfig -> Assertion
 testHaddockSublibraryBuildCache config =
   withDocumentationProject "documentation-cache/sublibrary" config (const assertBuildUpToDateAfterHaddock)
+
+-- | Documenting packages must not invalidate the dependents of libraries
+-- whose no-op builds it records, including those that it does not compile.
+testHaddockDependencyChainBuildCache :: ProjectConfig -> Assertion
+testHaddockDependencyChainBuildCache config =
+  withDocumentationProject "documentation-cache/chain" config (const assertBuildUpToDateAfterHaddock)
